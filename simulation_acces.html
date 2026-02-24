@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulation - Système de Contrôle d'Accès par Code-Barres</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  :root {
+    --navy: #1B3A5C; --blue: #2471A3; --lblue: #D4E6F1;
+    --green: #27AE60; --red: #E74C3C; --orange: #F39C12;
+    --dark: #1a1a2e; --darker: #16213e; --surface: #0f3460;
+    --text: #e8e8e8; --muted: #8899aa;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, var(--dark) 0%, var(--darker) 50%, #0a1628 100%);
+    color: var(--text); min-height: 100vh; overflow-x: hidden;
+  }
+
+  .header {
+    background: linear-gradient(90deg, var(--navy), var(--blue));
+    padding: 18px 30px; text-align: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    position: relative; overflow: hidden;
+  }
+  .header::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 200%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+    animation: shimmer 3s infinite;
+  }
+  @keyframes shimmer { to { transform: translateX(50%); } }
+  .header h1 { font-size: 1.5em; font-weight: 800; letter-spacing: -0.02em; position: relative; z-index: 1; }
+  .header p { font-size: 0.85em; color: var(--lblue); margin-top: 4px; position: relative; z-index: 1; }
+
+  .main { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 20px; padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+  .panel {
+    background: rgba(15, 52, 96, 0.5); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 20px; backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .panel-title {
+    font-size: 0.8em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--blue); margin-bottom: 16px; padding-bottom: 8px;
+    border-bottom: 2px solid rgba(36,113,163,0.3);
+  }
+
+  /* Scanner Panel */
+  .scanner-visual {
+    background: #111827; border: 2px solid #374151; border-radius: 12px;
+    padding: 20px; text-align: center; margin-bottom: 16px; position: relative;
+    overflow: hidden;
+  }
+  .scanner-visual.scanning { border-color: var(--blue); box-shadow: 0 0 20px rgba(36,113,163,0.3); }
+  .scan-line {
+    position: absolute; top: 0; left: 10%; width: 80%; height: 3px;
+    background: linear-gradient(90deg, transparent, #ff0000, transparent);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .scanning .scan-line { opacity: 1; animation: scanLine 1s ease-in-out; }
+  @keyframes scanLine { 0%{top:10%} 100%{top:85%} }
+
+  .barcode-display {
+    font-family: 'JetBrains Mono', monospace; font-size: 1.8em; font-weight: 700;
+    color: var(--text); margin: 10px 0; letter-spacing: 0.05em;
+  }
+  .barcode-bars {
+    display: flex; justify-content: center; gap: 2px; margin: 12px 0; height: 50px;
+  }
+  .barcode-bars span {
+    background: white; width: 2px; border-radius: 1px;
+    animation: barAppear 0.5s ease forwards;
+  }
+  @keyframes barAppear { from{height:0;opacity:0} to{height:100%;opacity:1} }
+
+  .scanner-input {
+    width: 100%; padding: 12px 16px; background: #1f2937; border: 1px solid #4b5563;
+    border-radius: 8px; color: white; font-family: 'JetBrains Mono', monospace;
+    font-size: 1em; outline: none; text-align: center; transition: all 0.3s;
+  }
+  .scanner-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(36,113,163,0.2); }
+  .scanner-input::placeholder { color: #6b7280; }
+
+  .btn-scan {
+    width: 100%; padding: 14px; margin-top: 12px; background: linear-gradient(135deg, var(--blue), var(--navy));
+    color: white; border: none; border-radius: 10px; font-size: 1em; font-weight: 700;
+    cursor: pointer; transition: all 0.3s; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .btn-scan:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(36,113,163,0.4); }
+  .btn-scan:active { transform: translateY(0); }
+
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .preset-btn {
+    padding: 8px 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px; color: var(--text); font-size: 0.75em; cursor: pointer; transition: all 0.2s;
+    text-align: left;
+  }
+  .preset-btn:hover { background: rgba(36,113,163,0.2); border-color: var(--blue); }
+  .preset-btn .name { font-weight: 600; display: block; }
+  .preset-btn .code { font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 0.9em; }
+
+  /* Hardware Panel */
+  .hardware-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+  .hw-item {
+    background: rgba(0,0,0,0.3); border-radius: 12px; padding: 14px; text-align: center;
+    border: 1px solid rgba(255,255,255,0.05); transition: all 0.5s;
+  }
+
+  .led-container { display: flex; justify-content: center; gap: 12px; margin: 8px 0; }
+  .led {
+    width: 28px; height: 28px; border-radius: 50%; transition: all 0.3s;
+    border: 2px solid rgba(255,255,255,0.1);
+  }
+  .led.green-off { background: #1a3a1a; }
+  .led.green-on { background: #27AE60; box-shadow: 0 0 20px #27AE60, 0 0 40px rgba(39,174,96,0.4); border-color: #27AE60; }
+  .led.red-off { background: #3a1a1a; }
+  .led.red-on { background: #E74C3C; box-shadow: 0 0 20px #E74C3C, 0 0 40px rgba(231,76,60,0.4); border-color: #E74C3C; }
+
+  .hw-label { font-size: 0.75em; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .lcd-screen {
+    background: #1a3a20; border: 3px solid #2d5a35; border-radius: 8px;
+    padding: 12px 16px; font-family: 'JetBrains Mono', monospace;
+    color: #33ff33; font-size: 0.95em; line-height: 1.6; min-height: 60px;
+    text-shadow: 0 0 8px rgba(51,255,51,0.5); position: relative;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+  }
+  .lcd-screen::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 3px);
+    pointer-events: none; border-radius: 5px;
+  }
+
+  .buzzer-icon {
+    width: 40px; height: 40px; margin: 8px auto; border-radius: 50%;
+    background: #2d2d2d; border: 2px solid #444; display: flex; align-items: center;
+    justify-content: center; transition: all 0.3s; font-size: 1.2em;
+  }
+  .buzzer-icon.active { background: var(--orange); border-color: var(--orange); box-shadow: 0 0 15px var(--orange); }
+
+  .door-container {
+    position: relative; width: 120px; height: 160px; margin: 10px auto;
+    perspective: 600px;
+  }
+  .door-frame {
+    position: absolute; inset: 0; border: 3px solid #555; border-radius: 4px;
+    background: rgba(0,0,0,0.2);
+  }
+  .door {
+    position: absolute; top: 3px; right: 3px; width: calc(100% - 6px); height: calc(100% - 6px);
+    background: linear-gradient(135deg, #5a4a3a, #4a3a2a); border-radius: 2px;
+    transform-origin: left center; transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 2px 0 8px rgba(0,0,0,0.5);
+  }
+  .door.open { transform: rotateY(-70deg); }
+  .door-handle {
+    position: absolute; right: 10px; top: 50%; width: 8px; height: 20px;
+    background: #c0a060; border-radius: 3px; transform: translateY(-50%);
+  }
+  .door-status {
+    font-size: 0.8em; font-weight: 700; margin-top: 8px; text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .door-status.locked { color: var(--red); }
+  .door-status.unlocked { color: var(--green); }
+
+  /* Logs Panel */
+  .log-list { max-height: 420px; overflow-y: auto; }
+  .log-list::-webkit-scrollbar { width: 4px; }
+  .log-list::-webkit-scrollbar-thumb { background: var(--blue); border-radius: 4px; }
+
+  .log-entry {
+    padding: 10px 12px; margin-bottom: 6px; border-radius: 8px; font-size: 0.82em;
+    border-left: 3px solid; animation: slideIn 0.3s ease; position: relative;
+  }
+  @keyframes slideIn { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+  .log-entry.success { background: rgba(39,174,96,0.1); border-color: var(--green); }
+  .log-entry.failure { background: rgba(231,76,60,0.1); border-color: var(--red); }
+  .log-entry .log-time { font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 0.9em; }
+  .log-entry .log-name { font-weight: 600; margin-top: 2px; }
+  .log-entry .log-status { font-size: 0.9em; margin-top: 2px; }
+  .log-entry .log-badge {
+    position: absolute; top: 10px; right: 10px; padding: 2px 8px;
+    border-radius: 10px; font-size: 0.75em; font-weight: 700;
+  }
+  .log-badge.ok { background: rgba(39,174,96,0.2); color: var(--green); }
+  .log-badge.ko { background: rgba(231,76,60,0.2); color: var(--red); }
+
+  .stats-bar {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px;
+  }
+  .stat {
+    background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px; text-align: center;
+  }
+  .stat-value { font-size: 1.5em; font-weight: 800; }
+  .stat-label { font-size: 0.65em; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+
+  .db-section { margin-top: 16px; }
+  .db-table { width: 100%; border-collapse: collapse; font-size: 0.78em; }
+  .db-table th { background: rgba(36,113,163,0.3); color: var(--lblue); padding: 8px; text-align: left; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.05em; }
+  .db-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .db-table tr:hover td { background: rgba(255,255,255,0.03); }
+  .badge-auth { padding: 2px 6px; border-radius: 6px; font-size: 0.85em; font-weight: 600; }
+  .badge-auth.yes { background: rgba(39,174,96,0.15); color: var(--green); }
+  .badge-auth.no { background: rgba(231,76,60,0.15); color: var(--red); }
+
+  .audio-ctx { display: none; }
+
+  @media (max-width: 1024px) { .main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1> Simulation : Système de Contrôle d'Accès </h1>
+  <p> scan de code-barres des cartes étudiants</p>
+</div>
+
+<div class="main">
+  <!-- LEFT: Scanner -->
+  <div class="panel">
+    <div class="panel-title">📡 Scanner Code-Barres USB</div>
+    <div class="scanner-visual" id="scannerVisual">
+      <div class="scan-line" id="scanLine"></div>
+      <div style="color:var(--muted);font-size:0.8em;margin-bottom:6px;">CODE-BARRES DÉTECTÉ</div>
+      <div class="barcode-bars" id="barcodeBars"></div>
+      <div class="barcode-display" id="barcodeDisplay">--------</div>
+    </div>
+    <input type="text" class="scanner-input" id="codeInput" placeholder="Entrez ou scannez un code-barres..." maxlength="20" autocomplete="off">
+    <button class="btn-scan" id="scanBtn" onclick="processScannedCode()">⚡ Scanner la Carte</button>
+
+    <div style="margin-top:16px;">
+      <div class="panel-title">👤 Cartes de Test</div>
+      <div class="presets">
+        <button class="preset-btn" onclick="quickScan('ETU20240001')"><span class="name">Ahmed Ben Ali</span><span class="code">ETU20240001</span></button>
+        <button class="preset-btn" onclick="quickScan('ETU20240002')"><span class="name">Fatima Zahra</span><span class="code">ETU20240002</span></button>
+        <button class="preset-btn" onclick="quickScan('ETU20240003')"><span class="name">Mohamed Salah</span><span class="code">ETU20240003</span></button>
+        <button class="preset-btn" onclick="quickScan('ETU20240099')"><span class="name">⛔ Carte inconnue</span><span class="code">ETU20240099</span></button>
+        <button class="preset-btn" onclick="quickScan('ETU20240004')"><span class="name">Yasmine Khelifi</span><span class="code">ETU20240004</span></button>
+        <button class="preset-btn" onclick="quickScan('ETU20240005')"><span class="name">⛔ Karim (suspendu)</span><span class="code">ETU20240005</span></button>
+      </div>
+    </div>
+
+    <div class="db-section">
+      <div class="panel-title">🗄️ Base SQLite — etudiants</div>
+      <table class="db-table">
+        <tr><th>Code</th><th>Nom</th><th>Filière</th><th>Accès</th></tr>
+        <tr><td style="font-family:'JetBrains Mono',monospace;font-size:0.9em">ETU2024..01</td><td>Ahmed Ben Ali</td><td>Info</td><td><span class="badge-auth yes">✓</span></td></tr>
+        <tr><td style="font-family:'JetBrains Mono',monospace;font-size:0.9em">ETU2024..02</td><td>Fatima Zahra</td><td>Elec</td><td><span class="badge-auth yes">✓</span></td></tr>
+        <tr><td style="font-family:'JetBrains Mono',monospace;font-size:0.9em">ETU2024..03</td><td>Mohamed Salah</td><td>Info</td><td><span class="badge-auth yes">✓</span></td></tr>
+        <tr><td style="font-family:'JetBrains Mono',monospace;font-size:0.9em">ETU2024..04</td><td>Yasmine Khelifi</td><td>Math</td><td><span class="badge-auth yes">✓</span></td></tr>
+        <tr><td style="font-family:'JetBrains Mono',monospace;font-size:0.9em">ETU2024..05</td><td>Karim Hadj</td><td>Info</td><td><span class="badge-auth no">✗</span></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- CENTER: Hardware -->
+  <div class="panel">
+    <div class="panel-title">🖥️ État du Matériel (Raspberry Pi GPIO)</div>
+    <div class="hardware-grid">
+      <div class="hw-item">
+        <div class="hw-label">LEDs Vertes (GPIO 17, 27)</div>
+        <div class="led-container">
+          <div class="led green-off" id="ledG1"></div>
+          <div class="led green-off" id="ledG2"></div>
+        </div>
+        <div class="hw-label" id="ledGreenStatus">OFF</div>
+      </div>
+      <div class="hw-item">
+        <div class="hw-label">LEDs Rouges (GPIO 22, 23)</div>
+        <div class="led-container">
+          <div class="led red-off" id="ledR1"></div>
+          <div class="led red-off" id="ledR2"></div>
+        </div>
+        <div class="hw-label" id="ledRedStatus">OFF</div>
+      </div>
+      <div class="hw-item">
+        <div class="hw-label">Buzzer (GPIO 24)</div>
+        <div class="buzzer-icon" id="buzzerIcon">🔔</div>
+        <div class="hw-label" id="buzzerStatus">SILENCE</div>
+      </div>
+      <div class="hw-item">
+        <div class="hw-label">Servo SG90 (GPIO 18 PWM)</div>
+        <div class="door-container">
+          <div class="door-frame"></div>
+          <div class="door" id="door"><div class="door-handle"></div></div>
+        </div>
+        <div class="door-status locked" id="doorStatus">🔒 VERROUILLÉE</div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <div class="panel-title">📟 Écran LCD 16x2 (I2C — 0x27)</div>
+      <div class="lcd-screen" id="lcdScreen">
+        <div id="lcdLine1">Systeme Pret...</div>
+        <div id="lcdLine2">Scannez une carte</div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <div class="panel-title">⏱️ Chronologie du traitement</div>
+      <div id="timeline" style="font-size:0.82em;color:var(--muted);min-height:60px;font-family:'JetBrains Mono',monospace;line-height:1.8;">
+        <div style="color:var(--blue)">▸ En attente d'un scan...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Logs -->
+  <div class="panel">
+    <div class="panel-title">📋 Journal d'Accès (logs_acces)</div>
+    <div class="stats-bar">
+      <div class="stat"><div class="stat-value" id="totalScans">0</div><div class="stat-label">Total</div></div>
+      <div class="stat"><div class="stat-value green" id="totalOk">0</div><div class="stat-label">Autorisés</div></div>
+      <div class="stat"><div class="stat-value red" id="totalKo">0</div><div class="stat-label">Refusés</div></div>
+    </div>
+    <div class="log-list" id="logList">
+      <div style="text-align:center;color:var(--muted);padding:30px;font-size:0.85em;">
+        Aucun événement enregistré.<br>Scannez une carte pour commencer.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DB = {
+  'ETU20240001': { nom: 'Ahmed', prenom: 'Ben Ali', filiere: 'Informatique', autorise: true },
+  'ETU20240002': { nom: 'Fatima', prenom: 'Zahra', filiere: 'Électronique', autorise: true },
+  'ETU20240003': { nom: 'Mohamed', prenom: 'Salah', filiere: 'Informatique', autorise: true },
+  'ETU20240004': { nom: 'Yasmine', prenom: 'Khelifi', filiere: 'Mathématiques', autorise: true },
+  'ETU20240005': { nom: 'Karim', prenom: 'Hadj', filiere: 'Informatique', autorise: false },
+};
+
+let stats = { total: 0, ok: 0, ko: 0 };
+let isProcessing = false;
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function beep(freq, duration) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = freq; osc.type = 'square';
+    gain.gain.value = 0.08;
+    osc.start(); osc.stop(ctx.currentTime + duration / 1000);
+  } catch(e) {}
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function now() {
+  return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function generateBars() {
+  const container = document.getElementById('barcodeBars');
+  container.innerHTML = '';
+  const widths = [3,1,2,1,3,2,1,1,3,1,2,3,1,1,2,1,3,1,2,1,3,2,1,3,1,1,2,3,1,2];
+  widths.forEach((w, i) => {
+    const bar = document.createElement('span');
+    bar.style.width = w + 'px';
+    bar.style.animationDelay = (i * 15) + 'ms';
+    if (i % 2 === 1) bar.style.opacity = '0';
+    container.appendChild(bar);
+  });
+}
+
+function addTimeline(text, color = 'var(--muted)') {
+  const el = document.getElementById('timeline');
+  const t = performance.now ? (performance.now() / 1000).toFixed(3) : '0.000';
+  el.innerHTML += `<div style="color:${color}">▸ [${now()}] ${text}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearTimeline() {
+  document.getElementById('timeline').innerHTML = '';
+}
+
+function addLog(code, name, status) {
+  stats.total++; 
+  if (status === 'ok') stats.ok++; else stats.ko++;
+  document.getElementById('totalScans').textContent = stats.total;
+  document.getElementById('totalOk').textContent = stats.ok;
+  document.getElementById('totalKo').textContent = stats.ko;
+
+  const list = document.getElementById('logList');
+  if (stats.total === 1) list.innerHTML = '';
+
+  const cls = status === 'ok' ? 'success' : 'failure';
+  const badge = status === 'ok' ? '<span class="log-badge ok">AUTORISÉ</span>' : '<span class="log-badge ko">REFUSÉ</span>';
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${cls}`;
+  entry.innerHTML = `${badge}<div class="log-time">${now()}</div><div class="log-name">${name || 'Inconnu'}</div><div class="log-status" style="font-family:'JetBrains Mono',monospace;font-size:0.9em;color:var(--muted)">${code}</div>`;
+  list.prepend(entry);
+}
+
+function setLCD(line1, line2) {
+  document.getElementById('lcdLine1').textContent = line1.substring(0, 16);
+  document.getElementById('lcdLine2').textContent = line2.substring(0, 16);
+}
+
+async function processScannedCode() {
+  if (isProcessing) return;
+  const code = document.getElementById('codeInput').value.trim();
+  if (!code) return;
+  isProcessing = true;
+  document.getElementById('scanBtn').disabled = true;
+  document.getElementById('scanBtn').textContent = '⏳ Traitement...';
+
+  clearTimeline();
+  addTimeline('Scanner USB : lecture du code-barres...', 'var(--blue)');
+  
+  // Scanner animation
+  document.getElementById('scannerVisual').classList.add('scanning');
+  document.getElementById('barcodeDisplay').textContent = code;
+  generateBars();
+  beep(1000, 100);
+  await sleep(800);
+  document.getElementById('scannerVisual').classList.remove('scanning');
+
+  addTimeline(`Code lu : ${code}`, 'var(--blue)');
+  addTimeline('Hashage SHA-256 du code...', 'var(--muted)');
+  await sleep(200);
+  addTimeline('Requête SQLite : SELECT * FROM etudiants...', 'var(--orange)');
+  await sleep(300);
+
+  const etudiant = DB[code];
+
+  if (etudiant && etudiant.autorise) {
+    // ACCESS GRANTED
+    const fullName = `${etudiant.prenom} ${etudiant.nom}`;
+    addTimeline(`✅ Étudiant trouvé : ${fullName}`, 'var(--green)');
+    addTimeline('GPIO 17,27 → HIGH (LEDs vertes ON)', 'var(--green)');
+    
+    document.getElementById('ledG1').className = 'led green-on';
+    document.getElementById('ledG2').className = 'led green-on';
+    document.getElementById('ledGreenStatus').textContent = 'ON';
+    
+    setLCD(fullName, 'Acces Autorise');
+    addTimeline(`LCD : "${fullName}" / "Acces Autorise"`, 'var(--green)');
+    
+    // Buzzer 1 beep
+    document.getElementById('buzzerIcon').classList.add('active');
+    document.getElementById('buzzerStatus').textContent = '1 BIP';
+    beep(1500, 300);
+    addTimeline('Buzzer GPIO 24 : 1 bip (300ms)', 'var(--green)');
+    await sleep(400);
+    document.getElementById('buzzerIcon').classList.remove('active');
+    
+    // Open door
+    document.getElementById('door').classList.add('open');
+    document.getElementById('doorStatus').className = 'door-status unlocked';
+    document.getElementById('doorStatus').textContent = '🔓 DÉVERROUILLÉE';
+    addTimeline('Servo GPIO 18 : PWM → 90° (porte ouverte)', 'var(--green)');
+    
+    addLog(code, fullName, 'ok');
+    addTimeline('INSERT INTO logs_acces (autorisé)', 'var(--muted)');
+    
+    // Wait 5s
+    for (let i = 5; i > 0; i--) {
+      addTimeline(`Attente : ${i}s restante(s)...`, 'var(--muted)');
+      await sleep(1000);
+    }
+    
+    // Close door
+    document.getElementById('door').classList.remove('open');
+    document.getElementById('doorStatus').className = 'door-status locked';
+    document.getElementById('doorStatus').textContent = '🔒 VERROUILLÉE';
+    addTimeline('Servo GPIO 18 : PWM → 0° (porte fermée)', 'var(--orange)');
+    
+    document.getElementById('ledG1').className = 'led green-off';
+    document.getElementById('ledG2').className = 'led green-off';
+    document.getElementById('ledGreenStatus').textContent = 'OFF';
+    addTimeline('GPIO 17,27 → LOW (LEDs vertes OFF)', 'var(--muted)');
+    
+  } else if (etudiant && !etudiant.autorise) {
+    // SUSPENDED
+    addTimeline(`⛔ Étudiant trouvé mais SUSPENDU : ${etudiant.prenom} ${etudiant.nom}`, 'var(--red)');
+    await accessDenied(code, `${etudiant.prenom} ${etudiant.nom} (suspendu)`);
+  } else {
+    // NOT FOUND
+    addTimeline('❌ Code non trouvé dans la base', 'var(--red)');
+    await accessDenied(code, null);
+  }
+
+  setLCD('Systeme Pret...', 'Scannez une carte');
+  addTimeline('✔ Cycle terminé — retour en attente', 'var(--blue)');
+  
+  document.getElementById('codeInput').value = '';
+  document.getElementById('scanBtn').disabled = false;
+  document.getElementById('scanBtn').textContent = '⚡ Scanner la Carte';
+  isProcessing = false;
+}
+
+async function accessDenied(code, name) {
+  addTimeline('GPIO 22,23 → HIGH (LEDs rouges ON)', 'var(--red)');
+  document.getElementById('ledR1').className = 'led red-on';
+  document.getElementById('ledR2').className = 'led red-on';
+  document.getElementById('ledRedStatus').textContent = 'ON';
+  
+  setLCD('Acces Refuse!', name ? name.substring(0,16) : 'Carte inconnue');
+  addTimeline('LCD : "Acces Refuse!"', 'var(--red)');
+  
+  // 3 beeps
+  document.getElementById('buzzerIcon').classList.add('active');
+  document.getElementById('buzzerStatus').textContent = '3 BIPS';
+  for (let i = 0; i < 3; i++) {
+    beep(800, 150);
+    addTimeline(`Buzzer GPIO 24 : bip ${i+1}/3`, 'var(--red)');
+    await sleep(300);
+  }
+  document.getElementById('buzzerIcon').classList.remove('active');
+  document.getElementById('buzzerStatus').textContent = 'SILENCE';
+  
+  addLog(code, name || 'Carte inconnue', 'ko');
+  addTimeline('INSERT INTO logs_acces (refusé)', 'var(--muted)');
+  
+  await sleep(2000);
+  
+  document.getElementById('ledR1').className = 'led red-off';
+  document.getElementById('ledR2').className = 'led red-off';
+  document.getElementById('ledRedStatus').textContent = 'OFF';
+  addTimeline('GPIO 22,23 → LOW (LEDs rouges OFF)', 'var(--muted)');
+}
+
+function quickScan(code) {
+  document.getElementById('codeInput').value = code;
+  processScannedCode();
+}
+
+// Enter key
+document.getElementById('codeInput').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') processScannedCode();
+});
+</script>
+</body>
+</html>
